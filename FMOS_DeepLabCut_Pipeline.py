@@ -6,37 +6,40 @@ import os;import csv;
 
 #-----------------Note: you have to set up the OAuth and back end permissions on dropbox / google drive prior to running this script -----------
 #Necessary Authentication = client_secrets.json for Drive, OAuth token for DropBox
-#gauth = GoogleAuth();gauth.LocalWebserverAuth();drive = GoogleDrive(gauth)
-#DriveContents = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList() #for specific folder, replace root with folderID
+DeepLabCut_Project_Folder = 'FMOS_Test'
+
+gauth = GoogleAuth();gauth.LocalWebserverAuth();drive = GoogleDrive(gauth)
+DriveContents = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList() #for specific folder, replace root with folderID
 access_token = 'HRIscS4SThMAAAAAAAAAAdMf56_ng1oQb2v_RDqO7Uj0jU623N_0j4xveTZIuCNU';dbx = dropbox.Dropbox(access_token)
-#Local_output_directory = "generatedContent/";d = Downloader() #This step uses ZDrive, not GoogleAPI!
-#folder_id = '1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' #videos folder that we want to download after video processing
+Local_output_directory = "generatedContent/";d = Downloader() #This step uses ZDrive, not GoogleAPI!
+folder_id = '1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' #videos folder that we want to download after video processing
 
 def uploadDropboxVideos():
     for entry in dbx.files_list_folder('/ToProcess', recursive=True).entries:
-        print(entry)
-        #Use instance FileMetadata for get more information of entry
         if isinstance(entry, dropbox.files.FileMetadata):
-            print(entry.path_display)
-            pathsplit = entry.path_display.split('/')
-            actual_path = 'downloads/' + pathsplit[2]
-            f = open(actual_path, "wb")
-            metadata, res = dbx.files_download(path=entry.path_display)
-            f.write(res.content)
-    Downloadedfiles = os.listdir('downloads/')
-    with open('localDownloads_List.csv', 'w', newline='') as csvfile:
+            if entry.path_display.endswith('.avi') or entry.path_display.endswith('.mp4'):
+                DropBox_PathSplit = entry.path_display.split('/')
+                Local_filepath= 'DropBox_Downloads/' + DropBox_PathSplit[len(DropBox_PathSplit)-1]
+                f = open(Local_filepath, "wb")
+                metadata, res = dbx.files_download(path=entry.path_display)
+                f.write(res.content)
+    Downloadedfiles = os.listdir('DropBox_Downloads/')
+    with open('DropboxLocalDownloads_List.csv', 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(Downloadedfiles)
-    for directory in DriveContents:
-        if (directory['title'] == "FMOS_Test"): #The folder ID that we want to upload to
-            print(directory)
-            #directoryID = directory['id'] #Directory ID is in the GoogleDrive link
-            directoryID = '1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam'
+    print('DropBox Files Downloaded! Uploading to Google Drive now~ \n')
 
-        for rawVideo in os.listdir('downloads/'):
-            rawVideo_Path = 'downloads/'+rawVideo
+    for directory in DriveContents:
+        if (directory['title'] == DeepLabCut_Project_Folder): #Project folder for DeepLabCut
+            ProjectID = directory['id'] #Directory ID is in the GoogleDrive link
+            ProjectContents = drive.ListFile({'q': "'{}' in parents and trashed=false".format(ProjectID)}).GetList()  # for specific folder, replace root with folderID
+            for subDirectory in ProjectContents:
+                if subDirectory['title'] == 'videos':
+                    VideoFolderID = subDirectory['id']
+        for rawVideo in os.listdir('DropBox_Downloads/'):
+            rawVideo_Path = 'DropBox_Downloads/'+rawVideo
             if rawVideo.endswith('.mp4'):
-                upload = drive.CreateFile({"mimeType": "video/mp4", "parents": [{"kind": "drive#fileLink", "id": directoryID}]})
+                upload = drive.CreateFile({"mimeType": "video/mp4", "parents": [{"kind": "drive#fileLink", "id": VideoFolderID}]})
                 upload.SetContentFile(rawVideo_Path)
                 upload.Upload()  # Upload the file.
                 print('Created file %s with mimeType %s' % (upload['title'], upload['mimeType']))
@@ -52,11 +55,11 @@ def uploadDropboxVideos():
     print('\nProceeding to next step (post-processing)\n')
     for videoID in uploadedVideo_IDs:
         originalVideo = drive.CreateFile({'id': videoID})
-        originalVideo.Delete()  # Permanently delete the file.
+        #originalVideo.Delete()  # Permanently delete the file.
     print('original videos deleted')
 
     poop = input("\nNdddddddnter to continue~ : ")
-    generated_Content = drive.ListFile({'q': "'1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' in parents and trashed=false"}).GetList()
+    #generated_Content = drive.ListFile({'q': "'1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' in parents and trashed=false"}).GetList()
     '''
     for file in generated_Content:
         generatedContentID = file['id']
@@ -103,5 +106,5 @@ def uploadGeneratedFiles():
             main()
             x+=1;
 
-#uploadDropboxVideos()
+uploadDropboxVideos()
 uploadGeneratedFiles()
