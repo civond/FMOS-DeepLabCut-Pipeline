@@ -1,86 +1,106 @@
 from pydrive.auth import GoogleAuth;from pydrive.drive import GoogleDrive
 import dropbox;from dropbox.files import FolderMetadata
-from zdrive import Downloader
-import os;import csv;
+import os;import csv;import requests
 #みんなのドリアン <3
 
 #-----------------Note: you have to set up the OAuth and back end permissions on dropbox / google drive prior to running this script -----------
-#Necessary Authentication = client_secrets.json for Drive, OAuth token for DropBox
+#Necessary Authentication = client_secrets.json for GDrive,credentials.json for ZDrive, OAuth token for DropBox
 DeepLabCut_Project_Folder = 'FMOS_Test'
 
 gauth = GoogleAuth();gauth.LocalWebserverAuth();drive = GoogleDrive(gauth)
 DriveContents = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList() #for specific folder, replace root with folderID
 access_token = 'HRIscS4SThMAAAAAAAAAAdMf56_ng1oQb2v_RDqO7Uj0jU623N_0j4xveTZIuCNU';dbx = dropbox.Dropbox(access_token)
-Local_output_directory = "generatedContent/";d = Downloader() #This step uses ZDrive, not GoogleAPI!
-folder_id = '1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' #videos folder that we want to download after video processing
+
+for directory in DriveContents: #This chuck gets directory ID's for deeplabcut project, videos, and plot-poses folder
+    if (directory['title'] == DeepLabCut_Project_Folder):
+        ProjectID = directory['id']
+        ProjectContents = drive.ListFile({'q': "'{}' in parents and trashed=false".format(ProjectID)}).GetList()
+        for subDirectory in ProjectContents:
+            if subDirectory['title'] == 'videos':
+                VideoFolderID = subDirectory['id']
+                Project_VideoContents = drive.ListFile({'q': "'{}' in parents and trashed=false".format(VideoFolderID)}).GetList()
+                for content in Project_VideoContents:
+                    if content['title']== 'plot-poses':
+                        PlotPosesID = content['id']
 
 def uploadDropboxVideos():
     for entry in dbx.files_list_folder('/ToProcess', recursive=True).entries:
         if isinstance(entry, dropbox.files.FileMetadata):
             if entry.path_display.endswith('.avi') or entry.path_display.endswith('.mp4'):
                 DropBox_PathSplit = entry.path_display.split('/')
-                Local_filepath= 'DropBox_Downloads/' + DropBox_PathSplit[len(DropBox_PathSplit)-1]
+                Local_filepath= DropBox_PathSplit[len(DropBox_PathSplit)-1]
                 f = open(Local_filepath, "wb")
                 metadata, res = dbx.files_download(path=entry.path_display)
                 f.write(res.content)
-    Downloadedfiles = os.listdir('DropBox_Downloads/')
-    with open('DropboxLocalDownloads_List.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(Downloadedfiles)
     print('DropBox Files Downloaded! Uploading to Google Drive now~ \n')
+    for rawVideo in os.listdir():
+        if rawVideo.endswith('.mp4') or rawVideo.endswith('.avi'):
+            upload = drive.CreateFile({"mimeType": "video/mp4", "parents": [{"kind": "drive#fileLink", "id": VideoFolderID}]})
+            upload.SetContentFile(rawVideo)
+            upload.Upload()  # Upload the file.
+            print('Created file %s with mimeType %s' % (upload['title'], upload['mimeType'])) ################################
+            os.remove(rawVideo)
+    uploaded_video_ids = []
+    video_directory_contents = drive.ListFile({'q': "'{}' in parents and trashed=false".format(VideoFolderID)}).GetList()
 
-    for directory in DriveContents:
-        if (directory['title'] == DeepLabCut_Project_Folder): #Project folder for DeepLabCut
-            ProjectID = directory['id'] #Directory ID is in the GoogleDrive link
-            ProjectContents = drive.ListFile({'q': "'{}' in parents and trashed=false".format(ProjectID)}).GetList()  # for specific folder, replace root with folderID
-            for subDirectory in ProjectContents:
-                if subDirectory['title'] == 'videos':
-                    VideoFolderID = subDirectory['id']
-        for rawVideo in os.listdir('DropBox_Downloads/'):
-            rawVideo_Path = 'DropBox_Downloads/'+rawVideo
-            if rawVideo.endswith('.mp4'):
-                upload = drive.CreateFile({"mimeType": "video/mp4", "parents": [{"kind": "drive#fileLink", "id": VideoFolderID}]})
-                upload.SetContentFile(rawVideo_Path)
-                upload.Upload()  # Upload the file.
-                print('Created file %s with mimeType %s' % (upload['title'], upload['mimeType']))
-                os.remove(rawVideo_Path)
-    uploadedVideo_IDs = []
-    videoDirectory_Contents = drive.ListFile({'q': "'1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' in parents and trashed=false"}).GetList() #make sure this is correct!
-    for video in videoDirectory_Contents:
+    for video in video_directory_contents:
         videoID = video['id'] #Google Drive ID for uploaded videos
-        uploadedVideo_IDs.append(videoID)
-    print(uploadedVideo_IDs)
+        uploaded_video_ids.append(videoID)
 
     #processVideos = input("\nNow process your videos using Colabs! Press enter to continue~ : ")
     print('\nProceeding to next step (post-processing)\n')
-    for videoID in uploadedVideo_IDs:
+    for videoID in uploaded_video_ids:
         originalVideo = drive.CreateFile({'id': videoID})
         #originalVideo.Delete()  # Permanently delete the file.
-    print('original videos deleted')
+    print('Uploaded videos from Drive deleted. Downloading remaining files locally :)')
+    #Drive_Video_Folder = VideoFolderID  # videos folder that we want to download after video processing
 
-    poop = input("\nNdddddddnter to continue~ : ")
-    #generated_Content = drive.ListFile({'q': "'1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam' in parents and trashed=false"}).GetList()
-    '''
-    for file in generated_Content:
-        generatedContentID = file['id']
-        drive.files.get(generatedContentID)
-    
-    for f in generated_Content:
-        # 3. Create & download by id.
-        print('title: %s, id: %s' % (f['title'], f['id']))
-        fname = f['title']
-        print('downloading to {}'.format(fname))
-        f_ = drive.CreateFile({'id': f['id']})
-        f_.GetContentFile(fname)
-        
-    '''
-
-    d.downloadFolder(folder_id, destinationFolder=Local_output_directory)
-
+def Upload_FromDeepLabCut():
+    def download_file_from_google_drive(id, destination):
+        def get_confirm_token(response):
+            for key, value in response.cookies.items():
+                if key.startswith('download_warning'):
+                    return value
+            return None
+        def save_response_content(response, destination):
+            CHUNK_SIZE = 32768
+            with open(destination, "wb") as f:
+                for chunk in response.iter_content(CHUNK_SIZE):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+        URL = "https://drive.google.com/drive/u/0/folders/1aqE91owiYbhuBsRdDNjGFzvIqvgPDYam"
+        session = requests.Session()
+        response = session.get(URL, params={'id': id}, stream=True)
+        token = get_confirm_token(response)
+        if token:
+            params = {'id': id, 'confirm': token}
+            response = session.get(URL, params=params, stream=True)
+        save_response_content(response, destination)
+    Local_OutputDirectory = 'testt/'
+    for item in Project_VideoContents:
+        if not item['title'].endswith('Trim'):
+            if item['title'] == 'plot-poses':
+                continue
+            itemID = item['id']
+            destination = Local_OutputDirectory + item['title']
+            download_file_from_google_drive(itemID, destination)
+    PlotPosesContent = drive.ListFile({'q': "'{}' in parents and trashed=false".format(PlotPosesID)}).GetList()
+    for item in PlotPosesContent:
+        if item['title'].endswith('Trim'):
+            childDir = Local_OutputDirectory + item['title']
+            os.mkdir(childDir)
+            ChildDirID = item['id']
+            help = drive.ListFile({'q': "'{}' in parents and trashed=false".format(ChildDirID)}).GetList()
+            for child in help:
+                itemID = child['id']
+                destination = childDir + '/' + child['title']
+                print(destination)
+                download_file_from_google_drive(itemID, destination)
+'''
 def uploadGeneratedFiles():
     filestoUpload = []
-    for item in os.listdir('generatedContent/'):
-        filePath = 'generatedContent/' + item
+    for item in os.listdir(Local_output_directory):
+        filePath = Local_output_directory + item
         if item.endswith('.mp4') or item.endswith('.pickle') or item.endswith('.h5'):
             filestoUpload.append(filePath)
         else:
@@ -105,6 +125,7 @@ def uploadGeneratedFiles():
             location = filestoUpload[x]
             main()
             x+=1;
-
-uploadDropboxVideos()
-uploadGeneratedFiles()
+'''
+#uploadDropboxVideos()
+Upload_FromDeepLabCut()
+#uploadGeneratedFiles()
