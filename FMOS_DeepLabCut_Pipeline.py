@@ -4,7 +4,7 @@ import os;import csv;import requests
 #みんなのドリアン <3
 
 #-----------------Note: you have to set up the OAuth and back end permissions on dropbox / google drive prior to running this script -----------
-#Necessary Authentication = client_secrets.json for GDrive,credentials.json for ZDrive, OAuth token for DropBox
+#Necessary Authentication = client_secrets.json for GDrive,credentials.json, OAuth token for DropBox
 DeepLabCut_Project_Folder = 'FMOS_Test'
 
 gauth = GoogleAuth();gauth.LocalWebserverAuth();drive = GoogleDrive(gauth)
@@ -96,36 +96,6 @@ def Upload_FromDeepLabCut():
                 destination = childDir + '/' + child['title']
                 print(destination)
                 download_file_from_google_drive(itemID, destination)
-'''
-def uploadGeneratedFiles():
-    filestoUpload = []
-    for item in os.listdir(Local_output_directory):
-        filePath = Local_output_directory + item
-        if item.endswith('.mp4') or item.endswith('.pickle') or item.endswith('.h5'):
-            filestoUpload.append(filePath)
-        else:
-            for graph in os.listdir(filePath):
-                directoryPath = filePath+'/'+graph
-                filestoUpload.append(directoryPath)
-    class TransferData:
-        def __init__(self, access_token):
-            self.access_token = access_token
-        def upload_file(self, file_from, file_to):
-            dbx = dropbox.Dropbox(self.access_token)
-            with open(file_from, 'rb') as f:
-                dbx.files_upload(f.read(), file_to)
-    def main():
-        transferData = TransferData(access_token)
-        file_from = location
-        file_to = '/test_dropbox/'+location  # The full path to upload the file to, including the file name
-        transferData.upload_file(file_from, file_to)
-    x = 0;
-    while x < len(filestoUpload):
-        if __name__ == '__main__':
-            location = filestoUpload[x]
-            main()
-            x+=1;
-'''
 #uploadDropboxVideos()
 Upload_FromDeepLabCut()
 #uploadGeneratedFiles()
